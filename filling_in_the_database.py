@@ -1,7 +1,7 @@
 import psycopg2
-from config import password
+from config import password, database, user
 
-with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
+with psycopg2.connect(database=database, user=user, password=password) as conn:
     with conn.cursor() as cur:
         cur.execute("""
                     INSERT INTO english_words (word)

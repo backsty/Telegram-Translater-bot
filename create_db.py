@@ -1,5 +1,5 @@
 import psycopg2
-from config import password
+from config import password, database, user
 
 
 def create_tables(cur):
@@ -53,6 +53,6 @@ def create_tables(cur):
     conn.commit()
 
 
-with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
+with psycopg2.connect(database=database, user=user, password=password) as conn:
     with conn.cursor() as cur:
         create_tables(cur)

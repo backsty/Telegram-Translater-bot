@@ -84,6 +84,7 @@ class States(StatesGroup):
     another_word = State()
 
 
+# Данная функция предназначена для дальнейшей реализации и сейчас не задействована!!!
 def get_users_id(user_id):
     """
     The function checks whether the user exists in the database. If the user does not exist, the function adds him
@@ -108,14 +109,13 @@ def start(message: types.Message):
     chat_id = message.chat.id
     user_name = message.from_user.first_name
     if not if_users_not_exists(chat_id):
-        all_users_list.append(chat_id)
+        # Можно и раскомментировать. Опять же для дальнейшей реализации!!!
+        # all_users_list.append(chat_id)
         add_users(chat_id, user_name)
         user_status[chat_id] = 0
         BOT.send_message(chat_id, f"Привет {user_name} 👋 Давай попрактикуемся в английском языке. "
                                   f"Тренировки можешь проходить в удобном для себя темпе. "
                                   f"Используй команду /cards для того чтобы начать обучение.")
-    else:
-        pass
 
 
 # Создаём обработчик команды
@@ -151,15 +151,6 @@ def create_cards(message: types.Message):
     8 card -> "Delete word"
     """
     chat_id = message.chat.id
-    user_name = message.from_user.first_name
-
-    # if if_users_not_exists(chat_id):
-    #     all_users_list.append(chat_id)
-    #     add_users(chat_id, user_name)
-    #     user_status[chat_id] = 0
-    #     BOT.send_message(chat_id, f"Привет {user_name} 👋 Давай попрактикуемся в английском языке. "
-    #                               f"Тренировки можешь проходить в удобном для себя темпе.")
-
     keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
 
     global buttons

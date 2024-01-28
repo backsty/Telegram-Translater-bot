@@ -1,5 +1,6 @@
 import psycopg2
-from config import password
+from config import password, database, user
+from functools import wraps
 
 """
 Хотел тут добавить traceback.
@@ -9,8 +10,18 @@ P.S. : Сделаю это чутка позже :)
 # import traceback_with_variables
 
 
+def db_connection(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with psycopg2.connect(database=database, user=user, password=password) as conn:
+            with conn.cursor() as cur:
+                return func(cur, *args, **kwargs)
+    return wrapper
+
+
+@db_connection
 # Получение случайной пары слов (одно русское, другое английское) из базы данных учитывая ассоциации пользователя
-def random_words_from_db(user_id):
+def random_words_from_db(cur, user_id):
     """
     The function selects a random word from the database for the specified user.
     It connects to the database, executes an SQL query to select a random word that has not yet been presented to the
@@ -30,31 +41,31 @@ def random_words_from_db(user_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :return: A random word from database, or None if no words are found or en error occurs
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT rus_w.word AS rw, en_w.word AS ew
-                    FROM russian_words rus_w
-                    JOIN all_words all_w ON all_w.russian_words_id = rus_w.id
-                    JOIN english_words en_w ON en_w.id = all_w.english_words_id
-                    FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
-                    WHERE u_w.user_id = %s OR u_w.user_id is NULL
-                    ORDER BY random()
-                    LIMIT 1;
-                """, (user_id,))
-                return cur.fetchone()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT rus_w.word AS rw, en_w.word AS ew
+            FROM russian_words rus_w
+            JOIN all_words all_w ON all_w.russian_words_id = rus_w.id
+            JOIN english_words en_w ON en_w.id = all_w.english_words_id
+            FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
+            WHERE u_w.user_id = %s OR u_w.user_id is NULL
+            ORDER BY random()
+            LIMIT 1;
+        """, (user_id,))
+        return cur.fetchone()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Получение списка случайных английских слов из базы данных учитывая ассоциации пользователя
-def random_english_words(word_to_avoid, user_id):
+def random_english_words(cur, word_to_avoid, user_id):
     """
     The function selects four random English words from the database that do not match the specified word and have
     not yet been presented to the user.
@@ -74,34 +85,34 @@ def random_english_words(word_to_avoid, user_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param word_to_avoid: The word that should not be selected
     :param user_id: User ID
     :return: A list of four random words, or an empty list if no words are found or an error occurs
     """
     output_words = []
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT en_w.word
-                    FROM english_words en_w
-                    JOIN all_words all_w ON all_w.english_words_id = en_w.id
-                    FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
-                    WHERE en_w.word != %s AND (u_w.user_id = %s OR u_w.user_id is NULL)
-                    ORDER BY random()
-                    LIMIT 4;
-                """, (word_to_avoid, user_id))
-                for row_list in cur.fetchall():
-                    output_words.append(row_list[0])
-                return output_words
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT en_w.word
+            FROM english_words en_w
+            JOIN all_words all_w ON all_w.english_words_id = en_w.id
+            FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
+            WHERE en_w.word != %s AND (u_w.user_id = %s OR u_w.user_id is NULL)
+            ORDER BY random()
+            LIMIT 4;
+        """, (word_to_avoid, user_id))
+        for row_list in cur.fetchall():
+            output_words.append(row_list[0])
+        return output_words
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Получение списка случайных русских слов из базы данных учитывая ассоциации пользователя
-def random_russian_words(word_to_avoid, user_id):
+def random_russian_words(cur, word_to_avoid, user_id):
     """
     The function selects four random Russian words from the database that do not match the specified word and have
     not yet been presented to the user.
@@ -121,34 +132,34 @@ def random_russian_words(word_to_avoid, user_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param word_to_avoid: The word that should not be selected
     :param user_id: User ID
     :return: A list of four random words, or an empty list if no words are found or an error occurs
     """
     output_words = []
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT rus_w.word
-                    FROM russian_words rus_w
-                    JOIN all_words all_w ON all_w.russian_words_id = rus_w.id
-                    FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
-                    WHERE rus_w.word != %s AND (u_w.user_id = %s OR u_w.user_id is NULL)
-                    ORDER BY random()
-                    LIMIT 4;
-                """, (word_to_avoid, user_id))
-                for row_list in cur.fetchall():
-                    output_words.append(row_list[0])
-                return output_words
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT rus_w.word
+            FROM russian_words rus_w
+            JOIN all_words all_w ON all_w.russian_words_id = rus_w.id
+            FULL OUTER JOIN user_words u_w ON u_w.all_words_id = all_w.id
+            WHERE rus_w.word != %s AND (u_w.user_id = %s OR u_w.user_id is NULL)
+            ORDER BY random()
+            LIMIT 4;
+        """, (word_to_avoid, user_id))
+        for row_list in cur.fetchall():
+            output_words.append(row_list[0])
+        return output_words
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Проверка существования пользователя(id, name)
-def if_users_not_exists(user_id):
+def if_users_not_exists(cur, user_id):
     """
     The function checks whether the user exists in the database.
     It connects to the database, executes an SQL query to search for a user with the specified ID, and returns True if
@@ -164,32 +175,32 @@ def if_users_not_exists(user_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :return: True if the user is not found, and False if the user is found
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT * FROM users
-                    WHERE id = %s
-                """, (user_id,))
-                if cur.fetchone() is None:
-                    return True
-                # if cur.fetchone() is None:
-                #     return True
-                # else:
-                #     return False
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
-                return False
+    try:
+        cur.execute("""
+            SELECT * FROM users
+            WHERE id = %s
+        """, (user_id,))
+        if cur.fetchone() is None:
+            return True
+        # if cur.fetchone() is None:
+        #     return True
+        # else:
+        #     return False
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
+        return False
 
 
+@db_connection
 # В дальнейшем нужно подправить эту функцию!!!!!!!!!!!!!!!!!!
 # Добавление пользователя для дальнейшего взаимодействия с ним
-def add_users(user_id, name):
+def add_users(cur, user_id, name):
     """
     The function adds a new user to the database.
     It connects to the database, executes an SQL query to check whether a user with the specified ID exists.
@@ -200,26 +211,26 @@ def add_users(user_id, name):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :param name: User name
     :return:
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    INSERT INTO users (id, name)
-                    VALUES (%s, %s)
-                """, (user_id, name))
-                conn.commit()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            INSERT INTO users (id, name)
+            VALUES (%s, %s)
+        """, (user_id, name))
+        cur.connection.commit()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Добавление пар слов в словарь
-def add_word_to_dictionary(user_id, english_word, russian_word):
+def add_word_to_dictionary(cur, user_id, english_word, russian_word):
     """
     The function adds a new word to the user's dictionary in the database.
     It connects to the database and executes a series of SQL queries to add the English and Russian words to their
@@ -244,43 +255,42 @@ def add_word_to_dictionary(user_id, english_word, russian_word):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :param english_word: English word to add
     :param russian_word: Russian word to add
     :return:
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    INSERT INTO english_words (word)
-                    VALUES (%s) RETURNING id
-                """, (english_word,))
-                english_word_id = cur.fetchone()[0]
+    try:
+        cur.execute("""
+            INSERT INTO english_words (word)
+            VALUES (%s) RETURNING id
+        """, (english_word,))
+        english_word_id = cur.fetchone()[0]
 
-                cur.execute("""
-                    INSERT INTO russian_words (word)
-                    VALUES (%s) RETURNING id
-                """, (russian_word,))
-                russian_word_id = cur.fetchone()[0]
+        cur.execute("""
+            INSERT INTO russian_words (word)
+            VALUES (%s) RETURNING id
+        """, (russian_word,))
+        russian_word_id = cur.fetchone()[0]
 
-                cur.execute("""
-                    INSERT INTO all_words (english_words_id, russian_words_id)
-                    VALUES (%s, %s) RETURNING id
-                """, (english_word_id, russian_word_id))
-                all_words_id = cur.fetchone()[0]
+        cur.execute("""
+            INSERT INTO all_words (english_words_id, russian_words_id)
+            VALUES (%s, %s) RETURNING id
+        """, (english_word_id, russian_word_id))
+        all_words_id = cur.fetchone()[0]
 
-                cur.execute("""
-                    INSERT INTO user_words (user_id, all_words_id)
-                    VALUES (%s, %s)
-                """, (user_id, all_words_id))
-                conn.commit()
-            except Exception as ex:
-                if ex.pgcode == '23505':
-                    return 'Duplicate'
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+        cur.execute("""
+            INSERT INTO user_words (user_id, all_words_id)
+            VALUES (%s, %s)
+        """, (user_id, all_words_id))
+        cur.connection.commit()
+    except Exception as ex:
+        if ex.pgcode == '23505':
+            return 'Duplicate'
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
 # Удаление пары слов из словаря
@@ -320,8 +330,9 @@ def delete_word_to_dictionary(user_id, english_word):
         print(massage)
 
 
+@db_connection
 # Удаление пользовательской пары слов
-def delete_a_specific_word(all_words, english_word_id, russian_word_id):
+def delete_a_specific_word(cur, all_words, english_word_id, russian_word_id):
     """
     The function deletes a specific word from the database.
     It connects to the database and executes a series of SQL queries to delete the word from the user_words, all_words,
@@ -342,39 +353,39 @@ def delete_a_specific_word(all_words, english_word_id, russian_word_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param all_words: Word ID in the all_words table
     :param english_word_id: English word ID in the english_words table
     :param russian_word_id: Russian word ID in the russian_words table
     :return:
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    DELETE FROM user_words
-                    WHERE all_words_id = %s
-                """, (all_words,))
-                cur.execute("""
-                    DELETE FROM all_words
-                    WHERE id = %s
-                """, (all_words,))
-                cur.execute("""
-                    DELETE FROM english_words
-                    WHERE id = %s
-                """, (english_word_id,))
-                cur.execute("""
-                    DELETE FROM russian_words
-                    WHERE id = %s
-                """, (russian_word_id,))
-                conn.commit()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            DELETE FROM user_words
+            WHERE all_words_id = %s
+        """, (all_words,))
+        cur.execute("""
+            DELETE FROM all_words
+            WHERE id = %s
+        """, (all_words,))
+        cur.execute("""
+            DELETE FROM english_words
+            WHERE id = %s
+        """, (english_word_id,))
+        cur.execute("""
+            DELETE FROM russian_words
+            WHERE id = %s
+        """, (russian_word_id,))
+        cur.connection.commit()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Проверка существования английского слова. Если существует, то выводим id
-def checking_existence_english_word(user_id, word):
+def checking_existence_english_word(cur, user_id, word):
     """
     The function checks the existence of an English word in the database.
     If the word exists, the function returns its ID.
@@ -391,29 +402,29 @@ def checking_existence_english_word(user_id, word):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :param word: English word to check
     :return: ID of the English word, if it exists
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT en_w.id 
-                    FROM english_words en_w
-                    JOIN all_words all_w ON en_w.id = all_w.english_words_id
-                    JOIN user_words u_w ON u_w.all_words_id = all_w.id
-                    WHERE u_w.user_id = %s AND en_w.word = %s
-                """, (user_id, word))
-                return cur.fetchone()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT en_w.id 
+            FROM english_words en_w
+            JOIN all_words all_w ON en_w.id = all_w.english_words_id
+            JOIN user_words u_w ON u_w.all_words_id = all_w.id
+            WHERE u_w.user_id = %s AND en_w.word = %s
+        """, (user_id, word))
+        return cur.fetchone()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Проверка существования русского слова. Если существует, то выводим id
-def checking_existence_russian_word(user_id, word):
+def checking_existence_russian_word(cur, user_id, word):
     """
     The function checks the existence of a Russian word in the database.
     If the word exists, the function returns its ID.
@@ -430,29 +441,29 @@ def checking_existence_russian_word(user_id, word):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :param word: Russian word to check
     :return: ID of the Russian word, if it exists
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT rus_w.id 
-                    FROM russian_words rus_w
-                    JOIN all_words all_w ON rus_w.id = all_w.russian_words_id
-                    JOIN user_words u_w ON u_w.all_words_id = all_w.id
-                    WHERE u_w.user_id = %s AND rus_w.word = %s
-                """, (user_id, word))
-                return cur.fetchone()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT rus_w.id 
+            FROM russian_words rus_w
+            JOIN all_words all_w ON rus_w.id = all_w.russian_words_id
+            JOIN user_words u_w ON u_w.all_words_id = all_w.id
+            WHERE u_w.user_id = %s AND rus_w.word = %s
+        """, (user_id, word))
+        return cur.fetchone()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Поиск связей между английскими словами
-def find_connect_between_english_words(english_words_id):
+def find_connect_between_english_words(cur, english_words_id):
     """
     The function finds connections between English words in the database.
     It returns the ID and the ID of the Russian word associated with the English word.
@@ -468,25 +479,25 @@ def find_connect_between_english_words(english_words_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param english_words_id: English word ID
     :return: tuple containing ID and Russian word ID
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT id, russian_words_id FROM all_words
-                    WHERE english_words_id = %s
-                """, (english_words_id,))
-                return cur.fetchone()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT id, russian_words_id FROM all_words
+            WHERE english_words_id = %s
+        """, (english_words_id,))
+        return cur.fetchone()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Поиск связей между русскими словами
-def find_connect_between_russian_words(russian_words_id):
+def find_connect_between_russian_words(cur, russian_words_id):
     """
     The function finds connections between Russian words in the database.
     It returns the ID and the ID of the English word associated with the Russian word.
@@ -502,25 +513,25 @@ def find_connect_between_russian_words(russian_words_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param russian_words_id: Russian word ID
     :return: tuple containing ID and English word ID
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT id, english_words_id FROM all_words
-                    WHERE russian_words_id = %s
-                """, (russian_words_id,))
-                return cur.fetchone()
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT id, english_words_id FROM all_words
+            WHERE russian_words_id = %s
+        """, (russian_words_id,))
+        return cur.fetchone()
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
+@db_connection
 # Пользователь добавляет своё слово
-def adding_a_word_by_the_user(user_id):
+def adding_a_word_by_the_user(cur, user_id):
     """
     The function counts the number of words added by the user to the database.
     If an exception occurs, the function prints information about the exception.
@@ -533,21 +544,20 @@ def adding_a_word_by_the_user(user_id):
     Also, this function intercepts all exceptions that may occur during the execution of the request and outputs
     detailed information about them is available in the terminal for debugging.
 
+    :param cur: cursor for working with the database
     :param user_id: User ID
     :return: String representation of the number of words added by the user
     """
-    with psycopg2.connect(database='kursovaya_db', user='postgres', password=password) as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    SELECT count(*) FROM user_words
-                    WHERE user_id = %s
-                """, (user_id,))
-                return str(cur.fetchone()[0])
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                massage = template.format(type(ex).__name__, ex.args)
-                print(massage)
+    try:
+        cur.execute("""
+            SELECT count(*) FROM user_words
+            WHERE user_id = %s
+        """, (user_id,))
+        return str(cur.fetchone()[0])
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        massage = template.format(type(ex).__name__, ex.args)
+        print(massage)
 
 
 #  В будущем тут будут функции по добавлению статистики пользователей и
